@@ -24,6 +24,13 @@ from typing import Optional
 import streamlit as st
 from youtube_transcript_api import YouTubeTranscriptApi
 import openai
+import json
+import streamlit.components.v1 as components
+
+# Embed the OpenAI API key directly. This key is used to authenticate
+# requests when generating summaries. Treat this as a secret and avoid
+# exposing it in public repositories.
+OPENAI_API_KEY = "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"
 
 
 def extract_video_id(url: str) -> Optional[str]:
@@ -65,7 +72,7 @@ def fetch_transcript(video_id: str) -> str:
     raw_data = transcript.to_raw_data()
     return "\n".join(entry["text"] for entry in raw_data)
 
-def summarize_transcript(transcript: str, api_key: str) -> str:
+def summarize_transcript(transcript: str) -> str:
     """Summarize a transcript using the OpenAI chat completions API.
 
     Given the full transcript text and a valid OpenAI API key, this function
@@ -83,7 +90,8 @@ def summarize_transcript(transcript: str, api_key: str) -> str:
     Raises:
         Exception: If the API request fails for any reason.
     """
-    openai.api_key = api_key
+    # Use the embedded API key for authentication
+    openai.api_key = OPENAI_API_KEY
     system_message = (
         "أنت محلل محتوى محترف وخبير في تبسيط المعلومات المعقدة وتحويلها إلى نقاط واضحة ومنظمة.\\n"
         "لدي فيديو يحتوي على معلومات تعليمية أو معرفية. أريدك أن تستخرج كل المفاهيم المهمة، "
@@ -158,29 +166,38 @@ def main() -> None:
             mime="text/plain",
         )
 
-        # Optional summarisation using OpenAI
-        with st.expander("Summarise Transcript (optional)"):
-            st.write(
-                "To generate a structured summary of this transcript using OpenAI's ChatGPT, "
-                "please paste your OpenAI API key below and click **Summarise Transcript**. "
-                "The key is kept only in your session and is not stored."
+        # Provide a button to copy the transcript to the clipboard
+        components.html(
+            f'''
+            <button style="margin-top:10px;padding:8px 12px;font-size:14px;"
+                    onclick="navigator.clipboard.writeText({json.dumps(transcript)})">
+                Copy Transcript
+            </button>
+            ''',
+            height=50,
+        )
+
+        # Automatically generate and display a summary using OpenAI
+        with st.spinner("Generating summary..."):
+            try:
+                summary = summarize_transcript(transcript)
+                st.success("Summary generated successfully!")
+            except Exception as e:
+                st.error(f"Failed to generate summary: {e}")
+                summary = ""
+        if summary:
+            st.write("Summary:")
+            st.markdown(summary)
+            # Provide a button to copy the summary to the clipboard
+            components.html(
+                f'''
+                <button style="margin-top:10px;padding:8px 12px;font-size:14px;"
+                        onclick="navigator.clipboard.writeText({json.dumps(summary)})">
+                    Copy Summary
+                </button>
+                ''',
+                height=50,
             )
-            api_key = st.text_input(
-                "Enter your OpenAI API key",
-                type="password",
-                key="openai_api_key",
-            )
-            if st.button("Summarise Transcript", key="summarise_button"):
-                if not api_key:
-                    st.error("Please provide your OpenAI API key to generate a summary.")
-                else:
-                    with st.spinner("Generating summary..."):
-                        try:
-                            summary = summarize_transcript(transcript, api_key)
-                            st.success("Summary generated successfully!")
-                            st.markdown(summary)
-                        except Exception as e:
-                            st.error(f"Failed to generate summary: {e}")
 
 
 if __name__ == "__main__":
